@@ -85,6 +85,10 @@ const CHAR_UUID    = "00000000-8e22-4541-9d4c-21edae82ed19";
 const canvas = document.getElementById("radar");
 const ctx = canvas.getContext("2d");
 
+/* ===== IMAGE VOITURE ===== */
+const carImg = new Image();
+carImg.src = "https://i.ibb.co/NL7ykz1/car.png"; // lien vers image PNG transparente
+
 /* ===== DESSIN RADAR ===== */
 function drawRadar(distance = 0, angle = 0, targetDetected = false) {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -116,24 +120,18 @@ function drawRadar(distance = 0, angle = 0, targetDetected = false) {
   ctx.fillRect(cx - 12, cy, 24, 30);
 
   /* Voiture cible */
-  if (distance > 0) {
+  if (distance > 0 && carImg.complete) {
     const maxDist = 100; // mètres
     const r = Math.min(distance / maxDist, 1) * 300;
     const rad = (angle - 90) * Math.PI / 180;
+
     const x = cx + r * Math.cos(rad);
     const y = cy + r * Math.sin(rad);
 
-    // Dessin d'une voiture stylisée
     ctx.save();
     ctx.translate(x, y);
-    ctx.rotate(rad + Math.PI/2); // orienter la voiture selon l'angle
-    ctx.fillStyle = targetDetected ? "#ef4444" : "#9ca3af";
-    ctx.fillRect(-10, -5, 20, 10); // corps de la voiture
-    ctx.fillStyle = "#000"; 
-    ctx.fillRect(-8, -6, 4, 2); // roue gauche
-    ctx.fillRect(4, -6, 4, 2);  // roue droite
-    ctx.fillRect(-8, 4, 4, 2);  // roue arrière gauche
-    ctx.fillRect(4, 4, 4, 2);   // roue arrière droite
+    ctx.rotate(rad + Math.PI/2); // tourner la voiture selon l'angle
+    ctx.drawImage(carImg, -15, -10, 30, 20); // taille voiture 30x20 px
     ctx.restore();
   }
 }
@@ -153,6 +151,8 @@ async function connectBLE() {
 
   try {
     btn.textContent = "🔎 Connexion...";
+    console.log("🔎 Recherche de la carte STM32...");
+
     const device = await navigator.bluetooth.requestDevice({
       filters: [{ namePrefix: 'WB_55_SEE' }],
       optionalServices: [SERVICE_UUID]
@@ -167,6 +167,7 @@ async function connectBLE() {
 
     await bleChar.startNotifications();
     btn.textContent = "🟢 Connecté";
+    console.log("✅ Notifications activées");
 
     bleChar.addEventListener("characteristicvaluechanged", event => {
       const d = event.target.value;
@@ -180,6 +181,7 @@ async function connectBLE() {
       document.getElementById("distance").textContent = distance.toFixed(1);
       document.getElementById("speed").textContent    = speed.toFixed(1);
       document.getElementById("angle").textContent    = angle;
+
       document.getElementById("target").parentNode.style.background = target ? "#ef4444" : "#020617";
 
       drawRadar(distance, angle, target);
