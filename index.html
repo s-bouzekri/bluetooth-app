@@ -120,14 +120,21 @@ function drawRadar(distance = 0, angle = 0, targetDetected = false) {
     const maxDist = 100; // mètres
     const r = Math.min(distance / maxDist, 1) * 300;
     const rad = (angle - 90) * Math.PI / 180;
-
     const x = cx + r * Math.cos(rad);
     const y = cy + r * Math.sin(rad);
 
+    // Dessin d'une voiture stylisée
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(rad + Math.PI/2); // orienter la voiture selon l'angle
     ctx.fillStyle = targetDetected ? "#ef4444" : "#9ca3af";
-    ctx.beginPath();
-    ctx.arc(x, y, 10, 0, Math.PI * 2);
-    ctx.fill();
+    ctx.fillRect(-10, -5, 20, 10); // corps de la voiture
+    ctx.fillStyle = "#000"; 
+    ctx.fillRect(-8, -6, 4, 2); // roue gauche
+    ctx.fillRect(4, -6, 4, 2);  // roue droite
+    ctx.fillRect(-8, 4, 4, 2);  // roue arrière gauche
+    ctx.fillRect(4, 4, 4, 2);   // roue arrière droite
+    ctx.restore();
   }
 }
 
@@ -138,7 +145,6 @@ let bleChar   = null;
 async function connectBLE() {
   const btn = document.getElementById("connect");
 
-  // Déconnexion si déjà connecté
   if (bleDevice && bleDevice.gatt.connected) {
     console.log("🔴 Déconnexion...");
     bleDevice.gatt.disconnect();
@@ -147,13 +153,10 @@ async function connectBLE() {
 
   try {
     btn.textContent = "🔎 Connexion...";
-    console.log("🔎 Recherche de la carte STM32...");
-
     const device = await navigator.bluetooth.requestDevice({
-      filters: [{ namePrefix: 'WB_55_SEE' }], // ou le nom exact de ta carte
+      filters: [{ namePrefix: 'WB_55_SEE' }],
       optionalServices: [SERVICE_UUID]
     });
-
 
     bleDevice = device;
     bleDevice.addEventListener('gattserverdisconnected', onDisconnected);
@@ -164,7 +167,6 @@ async function connectBLE() {
 
     await bleChar.startNotifications();
     btn.textContent = "🟢 Connecté";
-    console.log("✅ Notifications activées");
 
     bleChar.addEventListener("characteristicvaluechanged", event => {
       const d = event.target.value;
@@ -178,7 +180,6 @@ async function connectBLE() {
       document.getElementById("distance").textContent = distance.toFixed(1);
       document.getElementById("speed").textContent    = speed.toFixed(1);
       document.getElementById("angle").textContent    = angle;
-
       document.getElementById("target").parentNode.style.background = target ? "#ef4444" : "#020617";
 
       drawRadar(distance, angle, target);
@@ -218,4 +219,3 @@ drawRadar(0, 0, false);
 
 </body>
 </html>
-
