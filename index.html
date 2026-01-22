@@ -70,7 +70,7 @@
 <div id="data">
   <div class="card">Cible<br><strong id="target">-</strong></div>
   <div class="card">Distance<br><strong id="distance">-</strong> m</div>
-  <div class="card">Vitesse<br><strong id="speed">-</strong> m/s</div>
+  <div class="card">Vitesse<br><strong id="speed">-</strong> km/h</div>
   <div class="card">Angle<br><strong id="angle">-</strong> °</div>
 </div>
 
@@ -148,12 +148,7 @@ async function connectBLE() {
   try {
     btn.textContent = "🔎 Connexion...";
     console.log("🔎 Recherche de la carte STM32...");
-/*
-    const device = await navigator.bluetooth.requestDevice({
-      acceptAllDevices: true,
-      optionalServices: [SERVICE_UUID]
-    });
-    */
+
     const device = await navigator.bluetooth.requestDevice({
       filters: [{ namePrefix: 'WB_55_SEE' }], // ou le nom exact de ta carte
       optionalServices: [SERVICE_UUID]
@@ -223,3 +218,4 @@ drawRadar(0, 0, false);
 
 </body>
 </html>
+
