@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <title>Radar Vélo BLE</title>
+
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #0f172a;
+      color: #e5e7eb;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+      margin: 0;
+      padding: 20px;
+    }
+
+    h1 {
+      margin-bottom: 10px;
+    }
+
+    button {
+      padding: 12px 24px;
+      font-size: 16px;
+      border-radius: 10px;
+      border: none;
+      cursor: pointer;
+      background: #2563eb;
+      color: white;
+      transition: background 0.3s;
+    }
+
+    button:hover {
+      background: #1d4ed8;
+    }
+
+    #data {
+      display: flex;
+      gap: 20px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .card {
+      background: #020617;
+      padding: 12px 16px;
+      border-radius: 12px;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.4);
+      min-width: 120px;
+      text-align: center;
+      transition: background 0.3s;
+    }
+
+    canvas {
+      background: #020617;
+      border-radius: 12px;
+      margin-top: 10px;
+    }
+  </style>
+</head>
+
+<body>
+
+<h1>🚲 Radar arrière vélo (BLE)</h1>
+
+<button id="connect">🔵 Connexion Bluetooth</button>
+
+<div id="data">
+  <div class="card">Cible<br><strong id="target">-</strong></div>
+  <div class="card">Distance<br><strong id="distance">-</strong> m</div>
+  <div class="card">Vitesse<br><strong id="speed">-</strong> m/s</div>
+  <div class="card">Angle<br><strong id="angle">-</strong> °</div>
+</div>
+
+<canvas id="radar" width="400" height="400"></canvas>
+
+<script>
+/* ===== UUID BLE STM32 ===== */
+const SERVICE_UUID = "00000000-cc7a-482a-984a-7f2ed5b3e58f";
+const CHAR_UUID    = "00000000-8e22-4541-9d4c-21edae82ed19";
+
+/* ===== CANVAS ===== */
+const canvas = document.getElementById("radar");
+const ctx = canvas.getContext("2d");
+
+/* ===== DESSIN RADAR ===== */
+function drawRadar(distance = 0, angle = 0, targetDetected = false) {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  const cx = canvas.width / 2;
+  const cy = canvas.height - 40;
+
+  /* Route (bandes) */
+  ctx.strokeStyle = "#334155";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(cx - 90, 0);
+  ctx.lineTo(cx - 45, canvas.height);
+  ctx.moveTo(cx + 90, 0);
+  ctx.lineTo(cx + 45, canvas.height);
+  ctx.stroke();
+
+  /* Cercles distance */
+  ctx.strokeStyle = "#334155";
+  ctx.lineWidth = 1;
+  for (let r = 50; r <= 300; r += 50) {
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  /* Vélo */
+  ctx.fillStyle = "#22c55e";
+  ctx.fillRect(cx - 12, cy, 24, 30);
+
+  /* Voiture cible */
+  if (distance > 0) {
+    const maxDist = 100; // mètres
+    const r = Math.min(distance / maxDist, 1) * 300;
+    const rad = (angle - 90) * Math.PI / 180;
+
+    const x = cx + r * Math.cos(rad);
+    const y = cy + r * Math.sin(rad);
+
+    ctx.fillStyle = targetDetected ? "#ef4444" : "#9ca3af";
+    ctx.beginPath();
+    ctx.arc(x, y, 10, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+/* ===== GESTION BLE ===== */
+let bleDevice = null;
+let bleChar   = null;
+
+async function connectBLE() {
+  const btn = document.getElementById("connect");
+
+  // Déconnexion si déjà connecté
+  if (bleDevice && bleDevice.gatt.connected) {
+    console.log("🔴 Déconnexion...");
+    bleDevice.gatt.disconnect();
+    return;
+  }
+
+  try {
+    btn.textContent = "🔎 Connexion...";
+    console.log("🔎 Recherche de la carte STM32...");
+/*
+    const device = await navigator.bluetooth.requestDevice({
+      acceptAllDevices: true,
+      optionalServices: [SERVICE_UUID]
+    });
+    */
+    const device = await navigator.bluetooth.requestDevice({
+      filters: [{ namePrefix: 'WB_55_SEE' }], // ou le nom exact de ta carte
+      optionalServices: [SERVICE_UUID]
+    });
+
+
+    bleDevice = device;
+    bleDevice.addEventListener('gattserverdisconnected', onDisconnected);
+
+    const server  = await bleDevice.gatt.connect();
+    const service = await server.getPrimaryService(SERVICE_UUID);
+    bleChar       = await service.getCharacteristic(CHAR_UUID);
+
+    await bleChar.startNotifications();
+    btn.textContent = "🟢 Connecté";
+    console.log("✅ Notifications activées");
+
+    bleChar.addEventListener("characteristicvaluechanged", event => {
+      const d = event.target.value;
+
+      const target   = d.getUint8(0);
+      const distance = d.getUint16(1, true) / 10.0;
+      const speed    = d.getInt16(3, true) / 10.0;
+      const angle    = d.getInt16(5, true);
+
+      document.getElementById("target").textContent   = target ? "Oui" : "Non";
+      document.getElementById("distance").textContent = distance.toFixed(1);
+      document.getElementById("speed").textContent    = speed.toFixed(1);
+      document.getElementById("angle").textContent    = angle;
+
+      document.getElementById("target").parentNode.style.background = target ? "#ef4444" : "#020617";
+
+      drawRadar(distance, angle, target);
+    });
+
+  } catch (err) {
+    console.error("❌ Erreur BLE :", err);
+    alert("Erreur Bluetooth : " + err);
+    btn.textContent = "🔵 Connexion Bluetooth";
+  }
+}
+
+/* ===== GESTION DE LA DÉCONNEXION ===== */
+function onDisconnected() {
+  console.warn("⚠️ Carte STM32 déconnectée !");
+  const btn = document.getElementById("connect");
+  btn.textContent = "🔵 Connexion Bluetooth";
+
+  document.getElementById("target").textContent   = "-";
+  document.getElementById("distance").textContent = "-";
+  document.getElementById("speed").textContent    = "-";
+  document.getElementById("angle").textContent    = "-";
+  document.getElementById("target").parentNode.style.background = "#020617";
+
+  drawRadar(0, 0, false);
+
+  bleDevice = null;
+  bleChar = null;
+}
+
+/* ===== BOUTON ===== */
+document.getElementById("connect").addEventListener("click", connectBLE);
+
+/* Initial draw */
+drawRadar(0, 0, false);
+</script>
+
+</body>
+</html>
